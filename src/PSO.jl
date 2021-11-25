@@ -1,6 +1,8 @@
 module PSO
 
-struct Pso
+export Pso, evaluate, optimize!
+mutable struct Pso 
+    # são parâmetros do construtor
     n::Int64
     dim::Int64
     w::Float64
@@ -8,70 +10,81 @@ struct Pso
     c2::Float64
     mini::Float64
     maxi::Float64
-end
+    # não são parâmetros do construtor
+    X::Matrix{Float64}
+    V::Matrix{Float64}
+    pbest::Matrix{Float64}
+    gbest::Vector{Float64}
+    gbest_idx::Int64
+    fit_values::Vector{Float64}
+    pbest_values::Vector{Float64}
+    gbest_value::Float64
 
-function fitValuesCalc(f, X, fitValues)
-    for i in 1:size(X, 1)
-        fitValues[i] = f(X[i,:])
+    function Pso(n, dim, w, c1, c2, mini, maxi, f::Function)
+        X = (maxi - mini) .* rand(n, dim) .+ mini
+        pbest = copy(X)
+        V = zeros(n, dim)
+        fit_values = zeros(n)
+        fit_values = fit_values_calc(f, X, fit_values)
+        pbest_values = copy(fit_values)
+        gbest_idx = argmin(fit_values)
+        gbest = X[gbest_idx, :]
+        gbest_value = fit_values[gbest_idx]
+        new(n, dim, w, c1, c2, mini, maxi, X, V, pbest, gbest, gbest_idx, fit_values, pbest_values, gbest_value)
     end
-    return fitValues
+
 end
 
-function PsoInit(pso::Pso, f)
-    X = (pso.maxi - pso.mini) .* rand(pso.n, pso.dim) .+ pso.mini
-    pBest = copy(X)
-    V = zeros(pso.n, pso.dim)
-    fitValues = zeros(pso.n)
-    fitValues = fitValuesCalc(f, X, fitValues)
-    pBestValues = copy(fitValues)
-    gBest = argmin(fitValues)
-    gBestValue = fitValues[gBest]
-    return (X, pBest, V, fitValues, pBestValues, gBest, gBestValue)
+function fit_values_calc(f, X, fit_values)
+    @inbounds for i in axes(X, 1)
+        fit_values[i] = f(X[i,:])
+    end
+    return fit_values
 end
 
-function atualizaPart(pso::Pso, X, pBest, V, gBest)
-    for i in 1:size(X, 1)
+function fit_values_calc!(f, pso::Pso)
+    @inbounds for i in axes(pso.X, 1)
+        pso.fit_values[i] = f(pso.X[i,:])
+    end
+end
+
+function update_particles!(pso::Pso)
+    @inbounds for i in axes(pso.X, 1)
         r1 = rand()
         r2 = rand()    
-        for j in 1:size(X, 2)
-            V[i,j] = (pso.w * V[i,j]) + (pso.c1 * r1 * (pBest[i, j] - X[i, j])) +
-                    (pso.c2 * r2 * (X[gBest, j] - X[i, j]))
-            X[i,j] = X[i,j] + V[i,j]
+        for j in axes(pso.X, 2)
+            pso.V[i,j] = (pso.w * pso.V[i,j]) + (pso.c1 * r1 * (pso.pbest[i, j] - pso.X[i, j])) +
+                    (pso.c2 * r2 * (pso.X[pso.gbest_idx, j] - pso.X[i, j]))
+            pso.X[i,j] = pso.X[i,j] + pso.V[i,j]
         end
     end
-    X .= clamp.(X, pso.mini, pso.maxi)
-    return (X, V)
+    pso.X .= clamp.(pso.X, pso.mini, pso.maxi)
 end
 
-function evaluate(f, X, fitValues, pBest, pBestValues, gBest, gBestValue)
-    fitValues = fitValuesCalc(f, X, fitValues)
-    for (i, el) in enumerate(fitValues)
-        if el < pBestValues[i]
-            pBest[i,:] = X[i,:]
-            pBestValues[i] = el
+function evaluate!(f, pso::Pso)
+    fit_values_calc!(f, pso)
+    @inbounds for (i, el) in enumerate(pso.fit_values)
+        if el < pso.pbest_values[i]
+            pso.pbest[i,:] = pso.X[i,:]
+            pso.pbest_values[i] = el
         end
-        if el < gBestValue
-            gBest = i
-            gBestValue = el
+        if el < pso.gbest_value
+            pso.gbest_idx = i
+            pso.gbest_value = el
         end
     end
-    return (pBest, pBestValues, gBest, gBestValue)
 end
 
-function optimize(pso::Pso, f, iterations)
+function optimize!(pso::Pso, f, iterations)
     iter = 0
-    X, pBest, V, fitValues, pBestValues, gBest, gBestValue = PsoInit(pso, f)
-    while iter < iterations
-        X, V = atualizaPart(pso, X, pBest, V, gBest)
-        pBest, pBestValues, gBest, gBestValue = evaluate(f, X, fitValues, pBest, pBestValues, gBest, gBestValue)
+    while iter < iterations # todo: add avaliação da diferença entre iterações
+        update_particles!(pso)
+        evaluate!(f, pso)
         if iter % 10 == 0
-            println("iteration: $iter | gBestValue: $gBestValue")
+            println("iteration: $iter | gbest_value: $(pso.gbest_value)")
         end
         iter += 1
     end
-    return (X, gBest, gBestValue)
 end
-
-export Pso, fitValuesCalc, PsoInit, atualizaPart, evaluate, optimize
 
 end # module
