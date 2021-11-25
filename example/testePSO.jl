@@ -12,14 +12,14 @@ optimize!(pso, f, iterations)
 function testPSO(n::Int64, iterations::Int64)
     for i in 1:n
         pso = Pso(30, 5, 0.75, 1.5, 1.5, -5.12, 5.12, f)
-        X, gBest, gBestValue = optimize!(pso, f, iterations)
+        optimize!(pso, f, iterations)
     end
 end
 
 function testPSOthreads(n::Int64, iterations::Int64)
     Threads.@threads for i in 1:n
         pso = Pso(30, 5, 0.75, 1.5, 1.5, -5.12, 5.12, f)
-        X, gBest, gBestValue = optimize!(pso, f, iterations)
+        optimize!(pso, f, iterations)
     end
 end
 
